@@ -9,7 +9,7 @@
 
 #include "ledUtils.h"
 
-#define VERSION                     "1.0.0"
+#define VERSION                     "1.0.1"
 #define CIRCLE_STRIP                0
 #define NUM_LEDS                    15
 #define NUM_LEDS2                   3

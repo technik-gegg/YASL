@@ -181,7 +181,7 @@ void initWebserver() {
     });
     webServer.on("/status", HTTP_GET, []() {
         char status[255];
-        sprintf(status, "{ \"Device\": \"%s\", \"Effect\": %d, \"Muted\": %d, \"Powered\": %d, \"Version\": \"%s\" }", deviceName, selectedEffect, isMuted, isPowered, VERSION);
+        sprintf(status, "{ \"Device\": \"%s\", \"Effect\": %d, \"Muted\": %d, \"Powered\": %d, \"Version\": \"%s\", \"IPAddress\":\"%s\" }", deviceName, selectedEffect, isMuted, isPowered, VERSION, WiFi.localIP().toString().c_str());
         sendResponse(200, MIME_JSON, String(status));
     });
     webServer.on("/config", HTTP_GET, []() {
@@ -214,6 +214,7 @@ void initWebserver() {
     }
 
     webServer.onNotFound(handle404);
+    webServer.keepAlive(true);
     webServer.begin();
     Serial.println("WebServer started...");
     udp.beginMulticast(WiFi.localIP(), broadcast, UDP_PORT);

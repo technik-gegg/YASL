@@ -104,4 +104,8 @@ enum _FX {
 
 ## Recent changes
 
+**1.0.1** - Theme replaced
+
+- replaced the initial theme (with "Pulse" from Bootswatch.com), since it had issues showing up correctly on mobile devices. If you'd like to change the theme, install [Bootstrap-Studio](https://bootstrapstudio.io/) and open the file **YASL.bsdesign** from folder /Bootstrap-Studio. Go to *Settings->Themes* and pick the one you fancy. *Export* the files into the **/data/www** folder and re-upload the Filesystem image.
+
 **1.0.0** - Initial commit

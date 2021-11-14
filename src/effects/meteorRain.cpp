@@ -24,7 +24,7 @@ void MeteorRain(byte red, byte green, byte blue, byte _size, byte trailDecay, bo
     meteorRandomDecay = randomDecay;
     meteorCycleDone = false;
     meteorDir = dir;
-    Serial.println(meteorDir%2);
+    //Serial.println(meteorDir%2);
   }
   
   
