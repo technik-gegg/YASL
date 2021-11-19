@@ -3,8 +3,8 @@
 #define FASTLED_ESP8266_RAW_PIN_ORDER       // IMPORTANT!
 #define FASTLED_INTERNAL
 
-#include "FastLED.h"
 #include "Config.h"
+#include "FastLED.h"
 
 extern CRGB       leds[];
 extern CRGB       leds2[];

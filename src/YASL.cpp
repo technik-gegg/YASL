@@ -25,6 +25,8 @@ bool            isMuted = false;
 bool            isPowered = true;
 bool            smoothBlink = false;
 bool            fireReverseDirection = false;
+bool            isLearning = false;
+bool            inhibitBroadcast = false;
 int             twinkleColor = 164;
 int             paletteIndex = 0;                          
 int             fireCooling = 70;
@@ -37,12 +39,36 @@ int             fadeSpeed = 10;
 int             twinkleSpeed = 30;
 int             theaterCaseSpeed = 105;
 int             meteorRainSpeed  = 50;
-int             cylonSpeed = 30;
+int             cylonSpeed = 90;
 int             rippleSpeed = 50;
 int             blendSpeed = 40;
 uint8_t         brightness = 255;
 unsigned        millisCurrent;
 unsigned        millisLast;
+uint32_t        irCodes[MAX_IRCODES] {
+                  0x20,   // Arrow UP Button
+                  0x21,   // Arrow DOWN Button
+                  0x11,   // Arrow LEFT Button
+                  0x10,   // Arrow RIGHT Button
+                  0x2C,   // Menu Button
+                  0x0C,   // Power Button
+                  0x0D,   // Mute Button 
+                  0x0F,   // PiP Button (Save)
+                  0x2B,   // AV/TV Button (Music)
+                  0x0A    // Minus Button
+                };
+const char*     learnInstructions[] = {
+                  "Arrow UP Button",
+                  "Arrow DOWN Button",
+                  "Arrow LEFT Button",
+                  "Arrow RIGHT Button",
+                  "Menu Button",
+                  "Power Button",
+                  "Mute Button",
+                  "PIP (Save) Button",
+                  "AV/TV (Music) Button",
+                  "Minus Button"
+                };              
 
 IRrecv          irReceiver(IR_PIN);
 decode_results  results;
@@ -63,6 +89,10 @@ void decrementEffect() {
 }
 
 void setEffect(int number) {
+  if(number == 88) {
+    wifiMgr.resetSettings();                // wipe credentials
+    ESP.restart();
+  }
   if(number >=0 && number < MAX_EFFECTS) 
     newEffect = (byte)number;
 }
@@ -87,12 +117,14 @@ void decrementParam(int* target, int steps) {
   *target -= steps;
   if(*target < steps)
     *target = steps;
+  Serial.printf("Speed/Param now: %d\n", *target);
 }
 
 void incrementParam(int* target, int steps, int max) {
   *target += steps;
   if(*target > max)
     *target = max;
+  Serial.printf("Speed/Param now: %d\n", *target);
 }
 
 void IRAM_ATTR changeEffect(void) {
@@ -124,6 +156,17 @@ void changeColor() {
   }
 }
 
+int findButton(uint32_t btn) {
+  int index =-1;
+  for(int i=0; i< MAX_IRCODES; i++) {
+    if(irCodes[i] == btn) {
+      index = i;
+      break; 
+    }
+  }
+  return index;
+}
+
 void handleIRbutton(int btn) {
   switch(btn) {
     case IR_PIP:
@@ -137,6 +180,7 @@ void handleIRbutton(int btn) {
       writeEffect();
       writeSpeeds();
       selectedEffect = -1;
+      Serial.printf("Settings stored in file system.\n");
       break;
     
     case IR_UP:
@@ -263,7 +307,6 @@ void handleIRbutton(int btn) {
           decrementParam(&cylonSpeed, 5);
           break;
 
-
         case E_FIRE: 
           decrementParam(&fireCooling, 5);
           break;
@@ -310,6 +353,10 @@ void handleIRbutton(int btn) {
           else 
             twinkleColor = 0;
         }
+      break;
+    
+    default:
+      Serial.printf("Unknown button: %d\n", btn);
       break;
   }
 }
@@ -384,12 +431,73 @@ void setup(){
   readEffect();
   newEffect = selectedEffect;
   readSpeeds();
+  readIrCodes();
   initSound();
   changeColor();
   Serial.println("Webserver init...");
   initWebserver();
 }
 
+void learnRemote() {
+  int i = 0;
+  bool status;
+  irparams_t irParams;
+  decode_results res;
+  uint32_t lastCode = 0;
+  uint32_t newCodes[MAX_IRCODES];
+  unsigned long start = millis();
+
+  setAll(0, 0, 0);
+  setPixel(0, CHSV(HUE_AQUA, 255, 255));
+  setPixel(1, CHSV(HUE_GREEN,  255, 255));
+  setPixel(2, CHSV(HUE_AQUA, 255, 255));
+  showStrip();
+  Serial.printf("\n\n*** LEARNING IR-CODES ***\n");
+  isLearning = true;
+  for(int n=0; n< MAX_IRCODES; n++) {
+    newCodes[n] = 0;
+    rotateLedsRight(1);
+    delay(50);
+  }
+  rotateLedsRight(1);
+  start = millis();
+  do {
+    Serial.printf("Please press now the %s\t\t\t", learnInstructions[i]);
+    do {
+      status = irReceiver.decode(&res);
+      delay(150);
+      if(millis() - start > 10000) {
+        isLearning = false;
+        Serial.printf("\n\n*** TIMED OUT, ABORTING ***\n");
+        return;
+      }
+    } while(!status || res.rawlen == 0 || res.command == lastCode || res.repeat);
+    irReceiver.resume();
+    start = millis();
+    if(res.decode_type != RC5 && res.decode_type != RC5X) {
+      Serial.printf("Not a RC5/RC5X IR-Signal. Try another remote.\n");
+      continue;
+    }
+    for(int n=0; n< i; n++) {
+      if(newCodes[n] == res.command) {
+        Serial.printf("IR-Code: 0x%08X\n\n", res.command);
+        Serial.printf("Button already in use, try again.\n");
+        continue;
+      }
+    }
+    Serial.printf("using IR-Code: 0x%08X\n", res.command);
+    newCodes[i] = res.command;
+    lastCode = newCodes[i];
+    i++;
+    rotateLedsRight(NUM_LEDS-2,  15);
+  } while(i < MAX_IRCODES);
+  for(int n=0; n< MAX_IRCODES; n++) {
+    irCodes[n] = newCodes[n];
+  }
+  writeIrCodes();
+  Serial.printf("*** DONE ***\n");
+  isLearning = false;
+}
 
 void serialEvent() {
   while (Serial.available()) {
@@ -398,8 +506,10 @@ void serialEvent() {
       cmd += in;
     }
     else {
-      int effect = atoi(cmd.c_str());
-      if(effect >= E_FADE && effect < MAX_EFFECTS)
+        int effect = atoi(cmd.c_str());
+        if(effect == 99) {
+          learnRemote();
+        }
         setEffect(effect);
     }
   }
@@ -408,11 +518,13 @@ void serialEvent() {
 void loop() { 
 
   loopWebserver();
-  
+  if(isLearning)
+    return;
+
   if (irReceiver.decode(&results)) {
-    Serial.printf("IR-Code:    0x%02X\n", results.command);
-    if(results.decode_type == RC5) {
-      int btn = results.command;
+    if(results.decode_type == RC5 || results.decode_type == RC5X) {
+      Serial.printf("IR-Code:    0x%08X\n", results.command);
+      uint32_t btn = results.command;
       if(btn >= 0 && btn <= 9) {
         if(btnPress == 0) {
           btnCmd = btn*10;
@@ -427,11 +539,11 @@ void loop() {
       else {
         btnCmd = 0;
         btnPress = 0;
+        handleIRbutton(findButton(btn));
       }
-      handleIRbutton(btn);      
     }
     else {
-      Serial.println("No RC5 IR-Signal detected...");
+      Serial.printf("Not a RC5/RC5X IR-Signal detected.\n");
     }
     delay(100);
     irReceiver.resume();  // Receive the next value

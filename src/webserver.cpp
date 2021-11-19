@@ -4,6 +4,7 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266HTTPUpdateServer.h>
 #include <ESP8266HTTPClient.h>
+#include <ESP8266NetBIOS.h>
 #include <WiFiUdp.h>
 #include "effectlist.h"
 
@@ -11,6 +12,7 @@ extern byte     newEffect;
 extern byte     selectedEffect;
 extern bool     isMuted;
 extern bool     isPowered;
+extern bool     inhibitBroadcast;
 extern int      fireCooling, fireSparking, twinkleColor, numBalls;
 extern int      wipeSpeed, fadeSpeed, twinkleSpeed, theaterCaseSpeed, 
                 meteorRainSpeed, rippleSpeed, blendSpeed, cylonSpeed;
@@ -169,6 +171,12 @@ void initWebserver() {
         delay(2000);
         ESP.restart();
     });
+    webServer.on("/broadcast", HTTP_GET, []() {
+        String value = webServer.arg("v");
+        if(value != nullptr)
+            inhibitBroadcast = value.toInt() != 0;
+        sendResponse(200, MIME_TEXT, String(inhibitBroadcast));
+    });
     webServer.on("/effect", HTTP_GET, []() {
         String value = webServer.arg("v");
         if(value.toInt() >= 0 && value.toInt() < MAX_EFFECTS) {
@@ -179,9 +187,36 @@ void initWebserver() {
             sendResponse(404, MIME_TEXT, value);
         }
     });
+    webServer.on("/devices", HTTP_GET, []() {
+        char status[1028];
+        char temp[128];
+        int devices = MDNS.queryService("yasl", "tcp");
+        if(devices > 0) {
+            sprintf(status, "[");
+            for(int i=0; i< devices; i++) {
+                Serial.printf("%s - %s\n",MDNS.hostname(i).c_str(), MDNS.IP(i).toString().c_str());
+                sprintf(temp, "{ \"Device\": \"%s\", \"IP\":\"%s\" }", MDNS.hostname(i).c_str(), MDNS.IP(i).toString().c_str());
+                if(strlen(status) < 900) {
+                    strcat(status, temp);
+                    if(i < devices-1)
+                        strcat (status, ",");
+                }
+                else {
+                    Serial.printf("Device count overrun in '/devices' ...\n");
+                    break;
+                }
+            }
+            strcat(status, "]");
+            sendResponse(200, MIME_JSON, String(status));
+        }
+        else {
+            Serial.printf("No other YASL devices found.\n");
+            sendResponse(200, MIME_JSON, String("[]"));
+        }
+    });
     webServer.on("/status", HTTP_GET, []() {
         char status[255];
-        sprintf(status, "{ \"Device\": \"%s\", \"Effect\": %d, \"Muted\": %d, \"Powered\": %d, \"Version\": \"%s\", \"IPAddress\":\"%s\" }", deviceName, selectedEffect, isMuted, isPowered, VERSION, WiFi.localIP().toString().c_str());
+        sprintf(status, "{ \"Device\": \"%s\", \"Effect\": %d, \"Muted\": %d, \"Powered\": %d, \"Version\": \"%s\", \"IPAddress\":\"%s\", \"Broadcast\": %d }", deviceName, selectedEffect, isMuted, isPowered, VERSION, WiFi.localIP().toString().c_str(), !inhibitBroadcast);
         sendResponse(200, MIME_JSON, String(status));
     });
     webServer.on("/config", HTTP_GET, []() {
@@ -209,18 +244,22 @@ void initWebserver() {
 
     if(MDNS.begin(deviceName)) {
         MDNS.setHostname(deviceName);
-        MDNS.addService("http", "tcp", 80);
+        MDNS.addService("yasl", "tcp", 80);
         Serial.printf("MDNS set to: %s\n", deviceName);
     }
-
+    if(NBNS.begin(deviceName)) {
+        Serial.printf("NetBios set to: %s\n", deviceName);
+    }
     webServer.onNotFound(handle404);
     webServer.keepAlive(true);
     webServer.begin();
-    Serial.println("WebServer started...");
+    Serial.println("WebServer running...");
     udp.beginMulticast(WiFi.localIP(), broadcast, UDP_PORT);
 }
 
 void broadcastEffect(int effect) {
+    if(inhibitBroadcast)
+        return;
     if(isBroadcasting) {
         isBroadcasting = false;
         return;
@@ -233,6 +272,8 @@ void broadcastEffect(int effect) {
 }
 
 void broadcastButton(String btn) {
+    if(inhibitBroadcast)
+        return;
     char tmp[MAX_UDP_PACKET];
     sprintf(tmp,"YASL:BTN:%s", btn.c_str());
     udp.beginPacketMulticast(broadcast, UDP_PORT, WiFi.localIP());
@@ -244,6 +285,8 @@ void broadcastButton(String btn) {
 }
 
 void broadcastSpeed() {
+    if(inhibitBroadcast)
+        return;
     int speed = -1;
     switch(selectedEffect) {
         case E_COLORWIPE:

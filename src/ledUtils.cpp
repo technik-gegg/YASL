@@ -2,7 +2,7 @@
 
 CRGB  leds[NUM_LEDS];
 CRGB  leds2[NUM_LEDS2];
-byte  shift;
+byte  shift = 0;
 
 
 void showStrip() {
@@ -100,7 +100,7 @@ void rotateLedsRight(int cnt, int wait /* =30 */) {
 
   for(int i=0; i<cnt; i++) {
    CRGB last_led = leds[NUM_LEDS-1];
-   memmove( &leds[1], &leds[0], (NUM_LEDS-1)*sizeof(CRGB));
+   memmove(&leds[1], &leds[0], (NUM_LEDS-1)*sizeof(CRGB));
    leds[0] = last_led;
    showStrip();
    delay(wait);
