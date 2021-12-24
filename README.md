@@ -8,7 +8,9 @@ This is the firmware source code for YASL (**Y**et **A**nother **S**helf **L**am
 This project uses an ESP8266 (Wemos D1 mini) as the controller to address and program the WS2812 (NeoPixel) LEDs. The light effects can be controlled either by a IR remote controller (RC5) or via web interface.
 
 To compile this firmware and program it into the WEMOS D1 mini, you have to load it up in PlatformIO and run the Build/Upload commands of the WEMOS_D1 Project Task.
-For the very first build you also need to "Upload Filesystem Image", since the file system contains all the files to run the web server.
+For the very first build you also need to "Upload Filesystem Image", since the file system contains all the files to run the web server, as shown in the picture below.
+
+![YASL](images/Upload.jpg)
 
 It's recommended starting the **Monitor** right after your first upload of the firmware in order to retrieve the specific device name (YASL-xxxxxx).
 Then take your specific IR remote control (any device that produces **RC5/RC5X** codes is suitable), point it to the IR-Receiver and press the buttons. The debug console will spit out the codes received, which you have to adopt in order to make your remote control work with the YASL.
